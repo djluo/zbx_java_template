@@ -1,38 +1,59 @@
 #!/usr/bin/python
 
-import sys  
+import sys
 import json
 import struct
-import socket  
-  
-HOST = "172.17.42.1"
-PORT = "10052"
+import socket
 
-s=None  
-for res in socket.getaddrinfo(HOST, PORT, socket.AF_UNSPEC, socket.SOCK_STREAM):
-    af, socktype, proto, canonname, sa = res
-    s = socket.socket(af, socktype, proto)
-    s.connect(sa)
-    break
+port = sys.argv[1]
+keys = sys.argv[2]
 
-if s is None:  
-    print 'could not open socket'  
-    sys.exit(1)  
+JavaGateway = ('172.17.42.1', 10052)
+
+common  = {
+  "request":  "java gateway jmx",
+  "conn":     "192.168.1.83",
+  "username": None,
+  "password": None,
+}
+
+jmxs = {
+    "uptime"  : "jmx[java.lang:type=Runtime,Uptime]",
+    "maxfd"   : "jmx[java.lang:type=OperatingSystem,MaxFileDescriptorCount]",
+    "openfd"  : "jmx[java.lang:type=OperatingSystem,OpenFileDescriptorCount]",
+    "version" : "jmx[java.lang:type=Runtime,VmVersion]",
+    "ThreadCount"       : "jmx[java.lang:type=Threading,ThreadCount]",
+    "PeakThreadCount"   : "jmx[java.lang:type=Threading,PeakThreadCount]",
+    "DaemonThreadCount" : "jmx[java.lang:type=Threading,DaemonThreadCount]",
+    }
+
+common["keys"] = [ jmxs[keys] ]
+common["port"] = port
+
+queries = json.dumps(common)
 
 header = 'ZBXD\1'
-data   = '{"request": "java gateway internal", "keys":[\"zabbix[java,,version]\"]}'
+length = struct.pack('<8B', len(queries),0,0,0,0,0,0,0)
 
-send   = json.loads(data)
-send2  = json.dumps(send)
+s = None
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect(JavaGateway)
 
-length = struct.pack('<8B', len(send2),0,0,0,0,0,0,0)
+if s is None:
+    print 'could not open socket'
+    sys.exit(1)
 
 s.send(header)
 s.send(length)
-s.send(send2)
+s.send(queries)
 
 data = s.recv(5)
 data = s.recv(8)
 data = s.recv(1024)
-s.close()  
-print repr(data)
+s.close()
+
+value = json.loads(data)
+print repr(value)
+value = value["data"][0]
+
+print value.get("value")
